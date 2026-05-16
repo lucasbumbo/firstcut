@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Detect source code presence
+        id: check
+        run: |
+          if [ -d "scoring" ] && [ -d "tests" ]; then
+            echo "has_source=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_source=false" >> $GITHUB_OUTPUT
+            echo "::notice::Source code não está neste repo. Workflow vira no-op até você decidir publicá-lo aqui."
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.has_source == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy opencv-python-headless
+
+      - name: Run regression tests
+        if: steps.check.outputs.has_source == 'true'
+        run: python -m unittest discover tests/ -v
+
+      - name: Validate VERSION format
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSION file missing"
+            exit 1
+          fi
+          VER=$(tr -d '[:space:]' < VERSION)
+          if ! echo "$VER" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "::error::VERSION inválida: '$VER' (esperado X.Y ou X.Y.Z)"
+            exit 1
+          fi
+          echo "✓ VERSION = $VER"
